@@ -1,0 +1,44 @@
+# Compiled Object files, Static and Dynamic libs (Shared Objects)
+*.o
+*.a
+*.so
+*.exe
+*.bin
+*.db
+*.db.lock
+
+# Folders
+_obj/
+_test/
+pkg/
+debug/
+bin/
+/out/
+
+# IDE / Editor exceptions
+.idea/
+.vscode/
+*.iml
+*.iws
+atlassian-ide-plugin.xml
+
+# Architecture specific extensions/prefixes
+*.[568vq]
+[568vq].out
+
+*.cgo1.go
+*.cgo2.c
+_cgo_defun.c
+_cgo_gotypes.go
+_cgo_export.*
+
+# Results
+*.test
+*.prof
+
+# Client
+node_modules
+dist
+bower_components
+.tmp
+.publish/

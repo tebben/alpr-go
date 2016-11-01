@@ -1,0 +1,11 @@
+alpr:
+    location: C:/Users/time/Desktop/Downloads/openalpr-2.3.0-win-64bit/openalpr_64/alpr.exe
+    stream: http://192.168.24.82/mjpg/video.mjpg
+    confidence: 85
+    lost: 10000
+    scanTime: 2000
+mqtt:
+    host: gost.geodan.nl
+    port: 1883
+    clientId: lprToGost1
+    streamId: 57
