@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"strconv"
 )
 
 var (
@@ -25,6 +26,8 @@ var (
 	newPlates       = make(map[string]models.Result)
 	publishedPlates = make(map[string]models.Result)
 	mutex           = &sync.Mutex{}
+	plateLength 	= 6 // the exact number a plate should be
+	matchNumbers 	= 4 // how many characters should match to replace a scanning plate if confidence is higher
 )
 
 func main() {
@@ -103,17 +106,47 @@ func cleanPublishedPlates() {
 // if already in the list but the new result is of a higher confidence then the plate will be updated
 func updateNewPlates(results []models.Result) {
 	for _, r := range results {
+		if(len(r.Plate) != plateLength) {
+			continue
+		}
+
+		if !isLicensePlate(r.Plate) {
+			continue
+		}
+
+		shouldContinue := false
+		for p := range publishedPlates {
+			if matchCount(p, r.Plate, plateLength) >= matchNumbers {
+				shouldContinue = true
+				break
+			}
+		}
+
+		if shouldContinue{
+			continue
+		}
+
 		// plate is not in the published map, process it
 		if _, ok := publishedPlates[r.Plate]; !ok {
-			// plate is in new map, update it if higher confidence
-			// ToDo: some sort of check if the map contains an almost identical plate, if
-			// found and new is higher confidence remove old one and use new one
-			if p, ok := newPlates[r.Plate]; ok {
-				if r.Confidence > p.Confidence {
-					p.Confidence = r.Confidence
-
+			match := ""
+			for p := range newPlates {
+				if matchCount(p, r.Plate, plateLength) >= matchNumbers {
+					match = p
 				}
-			} else if r.Confidence >= config.Alpr.Confidence && len(r.Plate) == 6 {
+			}
+
+			if(len(match) > 0){
+				// plate is in new map, update it if higher confidence
+				// found and new is higher confidence remove old one and use new one
+				if p, ok := newPlates[r.Plate]; ok {
+					if r.Confidence > p.Confidence {
+						//fmt.Println(fmt.Sprintf("UPDATED: %s - %s", p.Plate, r.Plate))
+						p.Confidence = r.Confidence
+						p.Plate = r.Plate
+						p.LastSeen = time.Now().UnixNano()
+					}
+				}
+			} else if r.Confidence >= config.Alpr.Confidence {
 				r.FirstSeen = time.Now().UnixNano()
 				r.LastSeen = time.Now().UnixNano()
 				newPlates[r.Plate] = r
@@ -121,6 +154,86 @@ func updateNewPlates(results []models.Result) {
 		}
 	}
 }
+
+func matchCount(plate1 string, plate2 string, length int) int {
+	if len(plate1) != length || len(plate2) != length {
+		return 0
+	}
+
+	matches := 0
+	for i := 0; i < length; i++{
+		if(plate1[i] == plate2[i]){
+			matches++
+		}
+	}
+
+	return matches
+}
+
+func isLicensePlate(plate string) bool {
+	if checkInts(plate, []int{2, 3, 4, 5}, []int{0, 1}){ // 1951
+		return true
+	}
+
+	if checkInts(plate, []int{0, 1, 2, 3}, []int{4, 5}){ // 1965
+		return true
+	}
+
+	if checkInts(plate, []int{0, 1, 4, 5}, []int{2, 3}){ // 1973
+		return true
+	}
+
+	if checkInts(plate, []int{2, 3}, []int{0, 1, 4, 5}){ // 1978
+		return true
+	}
+
+	if checkInts(plate, []int{4, 5}, []int{0, 1, 2, 3}){ // 1991
+		return true
+	}
+
+	if checkInts(plate, []int{0, 1}, []int{2, 3, 4, 5}){ // 1999
+		return true
+	}
+
+	if checkInts(plate, []int{0, 1, 5}, []int{2, 3, 4}){ // 2005
+		return true
+	}
+
+	if checkInts(plate, []int{0, 4, 5}, []int{1, 2, 3}){ // 2009
+		return true
+	}
+
+	if checkInts(plate, []int{2, 3, 4}, []int{0, 1, 5}){ // 2006
+		return true
+	}
+
+	if checkInts(plate, []int{1, 2, 3}, []int{0, 4, 5}){ // 2008
+		return true
+	}
+
+	if checkInts(plate, []int{3, 4}, []int{0, 1, 2, 5}){ // 2015
+		return true
+	}
+
+	return false
+}
+
+func checkInts(plate string, intPlaces []int, nonIntPlaces []int) bool {
+	for _, i := range intPlaces {
+		if _, err := strconv.Atoi(plate[i:i + 1]); err != nil {
+			return false
+		}
+	}
+
+	for _, i := range nonIntPlaces {
+		if _, err := strconv.Atoi(plate[i:i + 1]); err == nil {
+			return false
+		}
+	}
+
+	return true
+}
+
 
 // checkPublishNewPlates checks if plates in the newPlates map are passed their ScanTime, if so they
 // will be published to GOST and removed from the map and added o the published map
@@ -152,7 +265,7 @@ func publishToGost(results []models.Result) {
 func startAlpr() {
 	ch := make(chan string)
 	go func() {
-		err := RunCommandCh(ch, "\r\n", config.Alpr.Location, "-c", "eu", "-j", config.Alpr.Stream)
+		err := RunCommandCh(ch, "\r\n", config.Alpr.Location, "-c", "eu", "-n", "1", "-j", config.Alpr.Stream)
 		if err != nil {
 			log.Fatal(err)
 		}
